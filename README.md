@@ -7,7 +7,7 @@ A Pi extension that puts the coding agent into **discussion mode** — a read-on
 Install from git:
 
 ```bash
-pi install git:github.com/user/pi-discuss@v0.1.0
+pi install git:github.com/kkkiio/pi-discuss@v0.1.0
 ```
 
 Or install locally for development:
