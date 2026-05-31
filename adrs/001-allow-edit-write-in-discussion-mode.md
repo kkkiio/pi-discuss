@@ -61,9 +61,15 @@ Bash remains restricted to safe read-only commands, as bash commands are unbound
 - Discussion mode becomes a self-contained research + documentation workflow.
 - No fragile file extension filtering to maintain.
 
+### Amendment (2026-05-30)
+
+After testing, we found that system prompt alone was insufficient — the agent frequently ignored the "do not modify implementation code" instruction and started editing source files. We added **file extension filtering** as a hard block: `edit`/`write` is only allowed on `.md`, `.mdx`, `.txt`, `.html` files. Other extensions get an immediate block with guidance to write Markdown instead.
+
+This does not change the core decision (edit/write are allowed), but adds a lightweight enforcement layer. The "no fragile filtering" claim was wrong — a small allowlist of document extensions is simpler and more effective than relying entirely on LLM instruction-following.
+
 ### Negative
 
-- An LLM that ignores the system prompt could modify source code. Mitigated by: the discussion system prompt is injected every turn; modern LLMs follow instructions well; bash safety filtering prevents destructive shell-based changes even if the LLM is confused.
+- An LLM that ignores the system prompt could modify source code. Mitigated by: the discussion system prompt is injected every turn; file extension filtering blocks writes to implementation files; bash safety filtering prevents destructive shell-based changes.
 - Users who want a guaranteed no-modification mode will need a separate "strict discussion" variant (out of scope for now).
 
 ## Bash safety filtering retained

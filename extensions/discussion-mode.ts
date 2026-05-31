@@ -26,6 +26,9 @@ const ASK_TOOL_NAME = "ask_user_question";
 const DISCUSSION_TOOLS = ["read", "bash", "grep", "find", "ls", "edit", "write", ASK_TOOL_NAME];
 const NORMAL_TOOLS = ["read", "bash", "edit", "write"];
 
+// File extensions that can be edited/written in discussion mode
+const WRITEABLE_EXTENSIONS = [".md", ".mdx", ".txt", ".html"];
+
 // ── Safe Bash Filtering ──
 
 const DESTRUCTIVE_PATTERNS = [
@@ -71,6 +74,7 @@ const SAFE_PATTERNS = [
 	/^\s*grep\b/,
 	/^\s*find\b/,
 	/^\s*ls\b/,
+	/^\s*cd\b/,
 	/^\s*pwd\b/,
 	/^\s*echo\b/,
 	/^\s*printf\b/,
@@ -106,6 +110,9 @@ const SAFE_PATTERNS = [
 	/^\s*python\s+--version/i,
 	/^\s*curl\s/i,
 	/^\s*wget\s+-O\s*-/i,
+	/^\s*just\b/,
+	/^\s*make\b/,
+	/^\s*node\b/,
 	/^\s*jq\b/,
 	/^\s*sed\s+-n/i,
 	/^\s*awk\b/,
@@ -143,21 +150,21 @@ interface Question {
 
 const DISCUSSION_SYSTEM_PROMPT = `You are in discussion mode — a research mode for deep codebase exploration and collaborative discussion.
 
-Core rules:
-- Your goal: understand the problem deeply through research and discussion.
-- Explore the codebase thoroughly before asking questions.
-- When you encounter ambiguity, ask the user clarifying questions using the ask_user_question tool.
-- Summarize your findings and propose next steps. Do NOT start implementing.
+Core workflow:
+- Your primary goal is to understand the problem and align with the user.
+- Write your analysis, plans, and decisions as Markdown documents first.
+- Only after the user confirms understanding should you consider implementation.
 
-Writing documents:
-- You may write documentation, design documents (ADR), PRDs, and implementation plans.
-- Do NOT write or modify implementation code.
-- If unsure whether a change counts as implementation, ask the user first.
+What you can write:
+- Markdown files (.md, .mdx): plans, ADRs, PRDs, research notes, meeting summaries.
+- Text files (.txt): logs, data extracts, notes.
+- HTML files (.html): demos, mockups, visual explanations.
+- Do NOT write or modify implementation code (.ts, .js, .rs, .py, .go, etc.).
 
-When a tool is blocked:
-- If bash blocks your command, do NOT try to bypass the restriction.
-- Instead, explain to the user what you were trying to do and why.
-- The user wants to discuss the problem with you, not have you run commands silently.
+When blocked:
+- If a tool or command is blocked, pause immediately.
+- Explain to the user what you were trying to do and why.
+- Ask how they'd like to proceed. Do NOT try workarounds.
 
 Available tools: read, bash (safe commands only), grep, find, ls, edit, write, ask_user_question
 
@@ -374,6 +381,17 @@ export default function discussionMode(pi: ExtensionAPI): void {
 	pi.on("tool_call", async (event) => {
 		if (!state.enabled) return;
 
+		// Block edits to non-documentation files
+		if (event.toolName === "edit" || event.toolName === "write") {
+			const path = event.input?.path as string | undefined;
+			if (path && !WRITEABLE_EXTENSIONS.some((ext) => path.endsWith(ext))) {
+				return {
+					block: true,
+					reason: `Discussion mode: you can only edit documentation files (${WRITEABLE_EXTENSIONS.join(", ")}). "${path}" looks like implementation code. Write your analysis as a Markdown document instead, or ask the user if they want to exit discussion mode.`,
+				};
+			}
+		}
+
 		// Block unsafe bash commands
 		if (event.toolName === "bash") {
 			const command = event.input.command as string;
@@ -383,6 +401,26 @@ export default function discussionMode(pi: ExtensionAPI): void {
 					reason: `Discussion mode: this command is blocked because it may modify files or system state. The user wants to discuss, not run destructive commands.\nExplain what you were trying to do and ask how to proceed.\n\nCommand: ${command}`,
 				};
 			}
+		}
+	});
+
+	// Improve error messages for disabled tools
+	pi.on("tool_result", async (event) => {
+		if (!state.enabled) return;
+		if (!event.isError) return;
+
+		// Tools that existed before discussion mode but are now disabled
+		const disabledTools = (previousTools ?? []).filter((t) => !DISCUSSION_TOOLS.includes(t));
+		if (disabledTools.includes(event.toolName)) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Discussion mode: the "${event.toolName}" tool is not available. You are in discussion mode — focus on research and alignment with the user. Write your analysis as a Markdown document, or ask the user for direction.`,
+					},
+				],
+				isError: true,
+			};
 		}
 	});
 }
