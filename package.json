@@ -1,9 +1,18 @@
 {
-  "name": "pi-discuss",
+  "name": "@kkkiio/pi-discuss",
   "version": "0.1.0",
   "description": "Discussion mode extension for Pi — read-only research with interactive user questions",
   "type": "module",
   "keywords": ["pi-package"],
+  "author": "kkkiio",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kkkiio/pi-discuss.git"
+  },
+  "pi": {
+    "extensions": ["./extensions/discussion-mode.ts"]
+  },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "typebox": "*"
@@ -11,5 +20,12 @@
   "devDependencies": {
     "@biomejs/biome": "^1.9.0",
     "typescript": "^5.8.0"
-  }
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "extensions/",
+    "README.md"
+  ]
 }
