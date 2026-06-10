@@ -1,6 +1,6 @@
-# pi-discuss Agent Guide
+# pi-arch-mode Agent Guide
 
-Discussion mode extension for Pi — read-only research mode with interactive user questions.
+Architecture mode extension for Pi — collaborative exploration, alignment, and decision-making.
 
 **Location:** `AGENTS.md` at the repository root.
 
@@ -14,11 +14,11 @@ Discussion mode extension for Pi — read-only research mode with interactive us
 
 ### Tool Safety Rules
 
-When modifying `extensions/discussion-mode.ts`:
+When modifying `extensions/arch-mode.ts`:
 
 - `DESTRUCTIVE_PATTERNS` and `SAFE_PATTERNS` arrays must remain comprehensive. Every new destructive command pattern added to `DESTRUCTIVE_PATTERNS` requires a corresponding safe alternative in `SAFE_PATTERNS` if one exists.
 - The `isSafeCommand` function must always return `false` for commands not explicitly in `SAFE_PATTERNS`.
-- `DISCUSSION_TOOLS` must never include `edit` or `write`.
+- `edit` and `write` in `ARCH_TOOLS` are guarded by `isWriteablePath` in the `tool_call` hook. Any new tool added to `ARCH_TOOLS` that can modify files requires a corresponding guard.
 
 ### State Persistence Rules
 
@@ -36,15 +36,17 @@ When modifying `extensions/discussion-mode.ts`:
 
 ### Overview
 
-A single-file Pi extension that registers a command, a custom tool, and lifecycle event handlers to implement discussion mode.
+A single-file Pi extension that registers a command, a custom tool, and lifecycle event handlers to implement architecture mode.
 
 ### Repo Structure & Important Files
 
 - `package.json` — Package metadata with `keywords: ["pi-package"]` and `peerDependencies`
-- `extensions/discussion-mode.ts` — Full implementation (command, tool, events, bash filtering)
-- `tests/discussion-flow.test.ts` — E2E tests using pi RPC mode
+- `extensions/arch-mode.ts` — Full implementation (command, tool, events, bash filtering)
+- `extensions/guardrail.ts` — Bash safety filter and writeable-path guard
+- `tests/arch-flow.test.ts` — E2E tests using pi RPC mode
 - `justfile` — Dev recipes (`just fmt`, `just check`, `just test`)
 - `biome.json` — Biome format/lint config
+- `adrs/` — Architecture Decision Records
 - `README.md` — User-facing documentation
 - `AGENTS.md` — This file
 
@@ -53,27 +55,31 @@ A single-file Pi extension that registers a command, a custom tool, and lifecycl
 The extension follows the plan-mode pattern from Pi's examples:
 
 1. **Command handlers**:
-   - `/discuss [topic]`: TUI entry point, enters mode, accepts optional topic
-   - `/discuss-off`: Exits discussion mode
+   - `/arch [topic]`: TUI entry point, enters mode, accepts optional topic
+   - `/arch-off`: Exits architecture mode
 2. **Event listeners** (`pi.events`): Handle extension-to-extension RPC
-   - `cmd:discuss:enter` — enter discussion mode (no payload)
-   - `cmd:discuss:exit` — exit discussion mode (no payload)
-   - `discuss:state-changed` — broadcast on state change
-3. **Tool registration** (`ask_user_question`): Structured Q&A tool, only active in discussion mode
+   - `cmd:arch:enter` — enter architecture mode (no payload)
+   - `cmd:arch:exit` — exit architecture mode (no payload)
+   - `arch:state-changed` — broadcast on state change
+3. **Tool registration** (`ask_user_question`): Structured Q&A tool, only active in architecture mode
 4. **Lifecycle events**:
    - `session_start`: Restore persisted state, bridge `ExtensionContext`, broadcast initial state
    - `session_shutdown`: Clear status UI
-   - `before_agent_start`: Inject discussion system prompt
-   - `tool_call`: Block `edit`/`write`, restrict bash to safe commands
+   - `before_agent_start`: Inject architecture system prompt
+   - `tool_call`: Guard edit/write to documentation-only files; restrict bash to safe commands
    - `tool_result`: Improve error messages for disabled tools
 
 ### Key Design Decisions
 
-- **`ask_user_question` is only active during discussion mode**: It's added to `DISCUSSION_TOOLS` and removed when mode exits. This prevents the LLM from blocking during normal task execution.
+- **`ask_user_question` is only active during architecture mode**: It's added to `ARCH_TOOLS` and removed when mode exits. This prevents the LLM from blocking during normal task execution.
 - **Tool restriction uses `pi.setActiveTools`/`pi.getActiveTools`**: Same approach as pi-plan-mode. Save current tools on enter, restore on exit.
 - **State persisted via `pi.appendEntry`**: Survives `/fork` (entries are copied to the new session).
 - **Bash filtering uses allowlist + blocklist**: Commands must NOT match destructive patterns AND must match a safe pattern.
-- **`/discuss` enters, does NOT toggle**: Toggle is anti-pattern for slash commands. Use `/discuss` to enter, `/discuss-off` to exit.
+- **`/arch` enters, does NOT toggle**: Toggle is anti-pattern for slash commands. Use `/arch` to enter, `/arch-off` to exit.
+
+### System Prompt Design
+
+The system prompt deliberately avoids framing document output as a mandatory step. The agent's primary goal is **understanding and alignment**. Writing documents (ADRs, PRDs, design notes) is an available tool, used when clarity is reached — not a required checkpoint.
 
 ## Operation Guide
 
@@ -107,15 +113,15 @@ The extension follows the plan-mode pattern from Pi's examples:
 4. **Test the extension manually**:
 
    ```bash
-   pi -e ./extensions/discussion-mode.ts
+   pi -e ./extensions/arch-mode.ts
    ```
 
-5. **Test discussion mode enter/exit**:
+5. **Test architecture mode enter/exit**:
 
    ```
-   /discuss
-   # Status shows "💬 discussing"
-   /discuss-off
+   /arch
+   # Status shows "🏗️ arch mode"
+   /arch-off
    # Mode turned off
    ```
 
@@ -130,9 +136,9 @@ just test
 Tests use pi's `--mode rpc` to spawn a headless pi instance with the extension loaded. Commands execute immediately without LLM calls.
 
 **Test coverage**:
-- Extension starts with discussion mode OFF
-- `/discuss` enters discussion mode
-- `/discuss-off` exits discussion mode
+- Extension starts with architecture mode OFF
+- `/arch` enters architecture mode
+- `/arch-off` exits architecture mode
 - Re-entering mode shows "Already" notification
 
 **Test architecture**:
@@ -142,6 +148,6 @@ Tests use pi's `--mode rpc` to spawn a headless pi instance with the extension l
 
 ### Utilities & Tips
 
-- Fast iteration: `pi -e ./extensions/discussion-mode.ts` for quick testing without installation
+- Fast iteration: `pi -e ./extensions/arch-mode.ts` for quick testing without installation
 - After code changes, use `/reload` to pick up changes without restarting pi
 - If `ask_user_question` hangs, check that `ctx.ui.select()` is available (non-print mode)

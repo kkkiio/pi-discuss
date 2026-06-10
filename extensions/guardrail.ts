@@ -1,5 +1,5 @@
 /**
- * Safety guardrails for discussion mode.
+ * Safety guardrails for architecture mode.
  *
  * Two categories of protection:
  *   1. Bash command filtering — blocklist + allowlist pattern matching
@@ -111,7 +111,7 @@ const SAFE_PATTERNS = [
 
 // ── API ──
 
-/** Returns true if the command is safe to execute in discussion mode. */
+/** Returns true if the command is safe to execute in architecture mode. */
 export function isSafeCommand(command: string): boolean {
 	const isDestructive = DESTRUCTIVE_PATTERNS.some((p) => p.test(command));
 	const isSafe = SAFE_PATTERNS.some((p) => p.test(command));
@@ -122,10 +122,10 @@ export function isSafeCommand(command: string): boolean {
 //  File Write Filtering
 // ═══════════════════════════════════════════════
 
-/** File extensions that can be edited/written in discussion mode. */
+/** File extensions that can be edited/written in architecture mode. */
 export const WRITEABLE_EXTENSIONS = [".md", ".mdx", ".txt", ".html"];
 
-/** Returns true if the path is allowed for edit/write in discussion mode. */
+/** Returns true if the path is allowed for edit/write in architecture mode. */
 export function isWriteablePath(path: string): boolean {
 	return WRITEABLE_EXTENSIONS.some((ext) => path.endsWith(ext));
 }

@@ -1,76 +1,89 @@
-# pi-discuss
+# pi-arch-mode
 
-A Pi extension that puts the coding agent into **discussion mode** — a read-only, research-focused mode where the agent explores your codebase and asks clarifying questions before making any changes.
+A Pi extension that puts the coding agent into **architecture mode** — a mode for deep exploration, collaborative thinking, and decision-making. The agent reads your codebase, asks clarifying questions, and when clarity is reached, records key decisions that can drive future development.
 
 ## Installation
 
 ```bash
-pi install npm:@kkkiio/pi-discuss
+pi install npm:@kkkiio/pi-arch-mode
 ```
 
 Or install from git:
 
 ```bash
-pi install git:github.com/kkkiio/pi-discuss
+pi install git:github.com/kkkiio/pi-arch-mode
 ```
 
 Or install locally for development:
 
 ```bash
-# cd /path/to/pi-discuss
+# cd /path/to/pi-arch-mode
 pi install .
 ```
 
 ## Usage
 
-Enter discussion mode:
+Enter architecture mode:
 
 ```
-/discuss
+/arch
 ```
 
 Or enter with a topic:
 
 ```
-/discuss How should I refactor the auth module?
+/arch I need to figure out how to handle multi-tenant data isolation
 ```
 
-Exit discussion mode:
+Exit architecture mode:
 
 ```
-/discuss-off
+/arch-off
 ```
 
-The agent enters discussion mode:
+In architecture mode, the agent:
 
-- Only read-only tools are available (`read`, `bash`, `grep`, `find`, `ls`)
-- Bash is restricted to safe commands (no `rm`, `mv`, `git commit`, etc.)
-- The custom `ask_user_question` tool lets the agent ask you structured clarifying questions
-- The status bar shows "💬 discussing"
+- Explores your codebase to understand the current state
+- Asks structured clarifying questions via the `ask_user_question` tool
+- Surfaces hidden assumptions and trade-offs
+- Can write design documents (`.md`, `.mdx`, `.txt`, `.html`) when decisions are reached
+- Cannot modify implementation code (`.ts`, `.js`, `.rs`, `.py`, `.go`, etc.)
+
+The status bar shows `🏗️ arch mode` while active.
 
 ### Example session
 
 ```
-You: /discuss How should I add rate limiting to the API?
+You: /arch I need to figure out how to handle multi-tenant data isolation
 
-Agent: [reads server.ts, middleware/, config/]
-       I can see the middleware pattern in middleware/auth.ts. Before I propose a design,
-       let me ask a few questions. [uses ask_user_question]
+Agent: [reads db/schema.ts, middleware/tenant.ts, config/]
+       I've reviewed the current database schema and tenant middleware.
+       Before I think through the options, let me ask a few things. [uses ask_user_question]
 
-Agent: Based on your answers (Redis, per-IP, 100 req/min), here's my recommendation:
-       1. Create middleware/rate-limit.ts using express-rate-limit
-       2. Configure limits in config/rate-limit.ts
-       3. Apply globally in server.ts
-       Run /discuss-off to start implementing.
+You:    [answers: Postgres RLS, shared tables, strict isolation]
 
-You: /discuss-off
+Agent: Given your constraints, row-level security with shared tables is the
+       right call. The trade-off is that all queries must include tenant
+       context — I'll note this as a core constraint in an ADR.
+       [writes adrs/005-multi-tenant-isolation.md]
 
-Agent: [now has full tool access, starts implementing]
+       Key decisions recorded. Run /arch-off when you're ready to move forward.
+
+You: /arch-off
 ```
 
 ## Features
 
-- **Read-only research**: Agent explores the codebase without making changes
-- **Structured Q&A**: Custom `ask_user_question` tool for interactive clarifying questions
-- **Safe bash**: Destructive commands are blocked automatically
-- **State persistence**: Discussion mode state survives `/fork` and session restarts
+- **Exploration-first**: Agent reads and understands before suggesting, not the other way around
+- **Structured Q&A**: Custom `ask_user_question` tool lets the agent ask clarifying questions with selectable options
+- **Decision recording**: Agent can write ADRs, PRDs, and design notes when alignment is reached
+- **Safe by default**: Implementation code is write-protected; bash is restricted to safe commands
+- **State persistence**: Architecture mode state survives session restarts and `/fork`
+
+## Relationship to automated development loops
+
+Architecture mode is designed to be the **upstream input** for automated agent workflows ("Loop"): align on goals, constraints, and key decisions here, then let automated loops decompose tasks, write code, review, and iterate based on those decisions.
+
+## Development
+
+See [AGENTS.md](./AGENTS.md) for contributor documentation.

@@ -1,17 +1,17 @@
 {
-  "name": "@kkkiio/pi-discuss",
+  "name": "@kkkiio/pi-arch-mode",
   "version": "0.1.0",
-  "description": "Discussion mode extension for Pi — read-only research with interactive user questions",
+  "description": "Architecture mode extension for Pi — collaborative exploration, alignment, and decision-making",
   "type": "module",
   "keywords": ["pi-package"],
   "author": "kkkiio",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/kkkiio/pi-discuss.git"
+    "url": "https://github.com/kkkiio/pi-arch-mode.git"
   },
   "pi": {
-    "extensions": ["./extensions/discussion-mode.ts"]
+    "extensions": ["./extensions/arch-mode.ts"]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",

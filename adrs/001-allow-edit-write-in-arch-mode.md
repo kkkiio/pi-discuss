@@ -1,4 +1,4 @@
-# ADR-001: Allow edit/write tools in discussion mode
+# ADR-001: Allow edit/write tools in architecture mode
 
 **Status:** Accepted  
 **Date:** 2026-05-30  
@@ -6,7 +6,7 @@
 
 ## Context
 
-Discussion mode (`/discuss`) puts the agent into a read-only research mode. The initial implementation restricted tools to `read`, `bash` (safe-only), `grep`, `find`, `ls`, and the custom `ask_user_question` tool. `edit` and `write` were blocked.
+Architecture mode (`/arch`) puts the agent into a read-only research mode. The initial implementation restricted tools to `read`, `bash` (safe-only), `grep`, `find`, `ls`, and the custom `ask_user_question` tool. `edit` and `write` were blocked.
 
 During testing, we observed that a pure read-only approach prevents the agent from producing useful written artifacts during discussion:
 
@@ -29,7 +29,7 @@ Blocking `edit`/`write` treats all file modifications as identical, but they are
 
 **Pros**: Guarantees no accidental code changes; simple to implement.
 
-**Cons**: Strips the agent of a key output medium. Forces mode switching for any written output, breaking the discussion flow. The agent becomes a "talk-only" companion rather than a research partner that produces artifacts.
+**Cons**: Strips the agent of a key output medium. Forces mode switching for any written output, breaking the architecture flow. The agent becomes a "talk-only" companion rather than a research partner that produces artifacts.
 
 ### Option B: Allow edit/write on `.md` files only (file extension filtering)
 
@@ -45,7 +45,7 @@ Blocking `edit`/`write` treats all file modifications as identical, but they are
 
 ## Decision
 
-**Allow `edit` and `write` in discussion mode, constrained by file extension filtering and system prompt guidance.**
+**Allow `edit` and `write` in architecture mode, constrained by file extension filtering and system prompt guidance.**
 
 Two layers of enforcement:
 
@@ -66,13 +66,13 @@ Bash remains restricted to safe read-only commands, as bash commands are unbound
 
 - Agent can produce ADRs, PRDs, implementation plans, and research summaries during discussion without mode switching.
 - File extension filtering prevents accidental source code modifications even if the LLM ignores the system prompt.
-- Discussion mode becomes a self-contained research + documentation workflow.
+- Architecture mode becomes a self-contained research + documentation workflow.
 
 ### Negative
 
 - File extension filtering can produce false negatives (a `.ts` file containing only type declarations is blocked). Mitigation: the block message guides the agent to write Markdown instead and ask the user if they want to proceed.
 - An LLM that both ignores the system prompt AND targets a document file extension could produce harmful output. Mitigation: bash safety filtering prevents destructive shell execution; the user reviews written files.
-- Users who want a guaranteed no-modification mode need a separate "strict discussion" variant (out of scope).
+- Users who want a guaranteed no-modification mode need a separate "strict architecture" variant (out of scope).
 
 ## What is NOT changed
 
@@ -80,9 +80,9 @@ Bash safety filtering ([ADR-002](./002-safe-bash-filtering.md)) is retained unch
 
 1. Bash commands are unbounded — one `git reset --hard` can discard uncommitted work.
 2. When an LLM hits a tool block, it tends to try alternative approaches aggressively. If bash were unrestricted, a confused LLM could cycle through destructive commands seeking a workaround.
-3. Safe bash provides the read-only exploration capability that is core to discussion mode (`cat`, `ls`, `grep`, `find`, `git log`, `git diff`).
+3. Safe bash provides the read-only exploration capability that is core to architecture mode (`cat`, `ls`, `grep`, `find`, `git log`, `git diff`).
 
 ## Related
 
-- `extensions/discussion-mode.ts` — `DISCUSSION_TOOLS` constant and `DISCUSSION_SYSTEM_PROMPT`
-- `tests/discussion-flow.test.ts` — E2E tests verifying discussion mode behavior
+- `extensions/arch-mode.ts` — `ARCH_TOOLS` constant and `ARCH_SYSTEM_PROMPT`
+- `tests/archion-flow.test.ts` — E2E tests verifying architecture mode behavior

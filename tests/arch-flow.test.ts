@@ -1,9 +1,9 @@
 /**
- * E2E tests for discussion-mode extension using pi RPC mode.
+ * E2E tests for arch-mode extension using pi RPC mode.
  *
  * Two test suites:
  *   commands     — fast state-transition tests (no LLM needed)
- *   conversation — full enter → discuss → exit flow (needs DEEPSEEK_API_KEY)
+ *   conversation — full enter → explore → exit flow (needs DEEPSEEK_API_KEY)
  *
  * Usage:
  *   just test              # runs both suites (conversation skips without API key)
@@ -179,28 +179,28 @@ describe("commands", () => {
 
 	before(() => {
 		cwd = tmpDir("pi-commands");
-		extPath = join(process.cwd(), "extensions", "discussion-mode.ts");
+		extPath = join(process.cwd(), "extensions", "arch-mode.ts");
 	});
 
 	after(() => rmSync(TMP_DIR, { recursive: true, force: true }));
 
-	it("enters via /discuss", async () => {
+	it("enters via /arch", async () => {
 		const c = spawnPi(cwd, extPath);
 		try {
-			await prompt(c, "/discuss");
-			const m = await notifyMatch(c, (s) => s.includes("Discussion mode enabled"));
+			await prompt(c, "/arch");
+			const m = await notifyMatch(c, (s) => s.includes("Architecture mode enabled"));
 			assert.ok(m);
 		} finally {
 			await kill(c);
 		}
 	});
 
-	it("exits via /discuss-off", async () => {
+	it("exits via /arch-off", async () => {
 		const c = spawnPi(cwd, extPath);
 		try {
-			await prompt(c, "/discuss");
+			await prompt(c, "/arch");
 			await notifyMatch(c, (s) => s.includes("enabled"));
-			await prompt(c, "/discuss-off");
+			await prompt(c, "/arch-off");
 			const m = await notifyMatch(c, (s) => s.includes("disabled"));
 			assert.ok(m);
 		} finally {
@@ -211,9 +211,9 @@ describe("commands", () => {
 	it("rejects re-enter when already in mode", async () => {
 		const c = spawnPi(cwd, extPath);
 		try {
-			await prompt(c, "/discuss");
+			await prompt(c, "/arch");
 			await notifyMatch(c, (s) => s.includes("enabled"));
-			await prompt(c, "/discuss");
+			await prompt(c, "/arch");
 			const m = await notifyMatch(c, (s) => s.includes("Already"));
 			assert.ok(m);
 		} finally {
@@ -229,14 +229,14 @@ const hasApiKey = Boolean(process.env.DEEPSEEK_API_KEY ?? process.env.OPENAI_API
 const LLM_ARGS = hasApiKey ? ["--provider", "deepseek", "--model", "deepseek-v4-flash"] : [];
 
 describe("conversation", { skip: !hasApiKey ? "No API key set" : false }, () => {
-	const extPath = join(process.cwd(), "extensions", "discussion-mode.ts");
+	const extPath = join(process.cwd(), "extensions", "arch-mode.ts");
 
-	it("enter → discuss → exit (full flow)", { timeout: 60000 }, async () => {
+	it("enter → explore → exit (full flow)", { timeout: 60000 }, async () => {
 		const c = spawnPi(process.cwd(), extPath, LLM_ARGS);
 
 		try {
-			// 1. Enter discussion mode
-			await prompt(c, "/discuss");
+			// 1. Enter architecture mode
+			await prompt(c, "/arch");
 			const enterNotify = await notifyMatch(c, (s) => s.includes("enabled"));
 			assert.ok(enterNotify, "should notify mode enabled");
 
@@ -246,12 +246,12 @@ describe("conversation", { skip: !hasApiKey ? "No API key set" : false }, () => 
 
 			const response = extractAssistantText(c.events);
 			assert.ok(
-				response.toLowerCase().includes("discussion"),
-				`Expected response to mention 'discussion', got: ${response.slice(0, 300)}`,
+				response.toLowerCase().includes("architecture"),
+				`Expected response to mention 'architecture', got: ${response.slice(0, 300)}`,
 			);
 
 			// 3. Exit
-			await prompt(c, "/discuss-off");
+			await prompt(c, "/arch-off");
 			const exitNotify = await notifyMatch(c, (s) => s.includes("disabled"));
 			assert.ok(exitNotify, "should notify mode disabled");
 		} finally {

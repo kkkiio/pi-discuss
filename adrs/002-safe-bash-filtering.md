@@ -1,4 +1,4 @@
-# ADR-002: Safe-command filtering for bash in discussion mode
+# ADR-002: Safe-command filtering for bash in architecture mode
 
 **Status:** Accepted  
 **Date:** 2026-05-30  
@@ -6,7 +6,7 @@
 
 ## Context
 
-Discussion mode restricts bash to safe, read-only commands. This is a safety net — the agent should explore and discuss, not execute destructive operations, even accidentally.
+Architecture mode restricts bash to safe, read-only commands. This is a safety net — the agent should explore and discuss, not execute destructive operations, even accidentally.
 
 The filtering uses a **dual-pattern approach** (blocklist + allowlist) borrowed from pi-plan-mode.
 
@@ -58,7 +58,7 @@ Commands explicitly allowed (must match `^\s*<cmd>\b`):
 
 ## What changed from plan-mode
 
-Two patterns were removed from the blocklist because `edit` and `write` are now available in discussion mode (see [ADR-001](./001-allow-edit-write-in-discussion-mode.md)), making shell redirection unnecessary to gate:
+Two patterns were removed from the blocklist because `edit` and `write` are now available in architecture mode (see [ADR-001](./001-allow-edit-write-in-arch-mode.md)), making shell redirection unnecessary to gate:
 
 | Removed pattern | Reason |
 |---|---|
@@ -76,5 +76,5 @@ All other patterns are retained unchanged.
 ## Related
 
 - `extensions/guardrail.ts` — `DESTRUCTIVE_PATTERNS`, `SAFE_PATTERNS`, `isSafeCommand()`
-- `extensions/discussion-mode.ts` — imports `isSafeCommand` from guardrail
-- [ADR-001: Allow edit/write in discussion mode](./001-allow-edit-write-in-discussion-mode.md)
+- `extensions/arch-mode.ts` — imports `isSafeCommand` from guardrail
+- [ADR-001: Allow edit/write in architecture mode](./001-allow-edit-write-in-arch-mode.md)

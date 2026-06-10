@@ -1,16 +1,17 @@
 /**
- * Discussion Mode Extension
+ * Architecture Mode Extension
  *
- * Read-only research mode that encourages the agent to explore the codebase
- * and ask the user clarifying questions before making any changes.
+ * A mode for deep exploration, collaborative thinking, and decision-making.
+ * The agent reads, asks clarifying questions, and when clarity is reached,
+ * records key decisions that can drive future automated development loops.
  *
  * Features:
- * - /discuss [topic] command to enter discussion mode
- * - /discuss-off command to leave discussion mode
- * - Tools restricted to read-only + ask_user_question
+ * - /arch [topic] command to enter architecture mode
+ * - /arch-off command to leave architecture mode
+ * - Tools include read + edit/write (documentation only) + ask_user_question
  * - Bash restricted to safe read-only commands
  * - Custom ask_user_question tool for structured Q&A
- * - System prompt injected per-turn to bias toward exploration
+ * - System prompt biases toward exploration and alignment, not output
  * - State persists across sessions and forks
  * - pi.events for extension-to-extension RPC
  */
@@ -21,16 +22,16 @@ import { WRITEABLE_EXTENSIONS, isSafeCommand, isWriteablePath } from "./guardrai
 
 // ── Constants ──
 
-const STATUS_KEY = "discussion-mode";
-const STATE_ENTRY_TYPE = "discussion-mode-state";
+const STATUS_KEY = "arch-mode";
+const STATE_ENTRY_TYPE = "arch-mode-state";
 const ASK_TOOL_NAME = "ask_user_question";
 
-const DISCUSSION_TOOLS = ["read", "bash", "grep", "find", "ls", "edit", "write", ASK_TOOL_NAME];
+const ARCH_TOOLS = ["read", "bash", "grep", "find", "ls", "edit", "write", ASK_TOOL_NAME];
 const NORMAL_TOOLS = ["read", "bash", "edit", "write"];
 
 // ── Types ──
 
-interface DiscussionState {
+interface ArchState {
 	enabled: boolean;
 }
 
@@ -48,33 +49,32 @@ interface Question {
 
 // ── System Prompt ──
 
-const DISCUSSION_SYSTEM_PROMPT = `You are in discussion mode — a research mode for deep codebase exploration and collaborative discussion.
+const ARCH_SYSTEM_PROMPT = `You are in architecture mode — a mode for deep exploration, collaborative thinking, and decision-making.
 
 Core workflow:
 - Your primary goal is to understand the problem and align with the user.
-- Write your analysis, plans, and decisions as Markdown documents first.
-- Only after the user confirms understanding should you consider implementation.
+- Read broadly, ask clarifying questions, surface hidden assumptions.
+- When the discussion reaches clarity, record key decisions so they can drive future work.
 
 What you can write:
-- Markdown files (.md, .mdx): plans, ADRs, PRDs, research notes, meeting summaries.
+- Markdown files (.md, .mdx): ADRs, PRDs, design notes, research summaries.
 - Text files (.txt): logs, data extracts, notes.
 - HTML files (.html): demos, mockups, visual explanations.
 - Do NOT write or modify implementation code (.ts, .js, .rs, .py, .go, etc.).
 
 When blocked:
-- If a tool or command is blocked, pause immediately.
-- Explain to the user what you were trying to do and why.
+- If a tool or command is blocked, pause and explain to the user.
 - Ask how they'd like to proceed. Do NOT try workarounds.
 
 Available tools: read, bash (safe commands only), grep, find, ls, edit, write, ask_user_question
 
-To exit discussion mode, tell the user to run /discuss-off.`;
+To exit architecture mode, tell the user to run /arch-off.`;
 
 // ── Extension ──
 
-export default function discussionMode(pi: ExtensionAPI): void {
+export default function archMode(pi: ExtensionAPI): void {
 	// ── Module-level state ──
-	const state: DiscussionState = { enabled: false };
+	const state: ArchState = { enabled: false };
 	let previousTools: string[] | undefined;
 
 	// Context bridged from session_start for use in pi.events callbacks
@@ -84,7 +84,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 
 	function updateStatus(ctx: ExtensionContext): void {
 		if (state.enabled) {
-			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", "💬 discussing"));
+			ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("accent", "🏗️ arch mode"));
 		} else {
 			ctx.ui.setStatus(STATUS_KEY, undefined);
 		}
@@ -95,12 +95,12 @@ export default function discussionMode(pi: ExtensionAPI): void {
 	}
 
 	function broadcastState(): void {
-		pi.events.emit("discuss:state-changed", { enabled: state.enabled });
+		pi.events.emit("arch:state-changed", { enabled: state.enabled });
 	}
 
 	function enterMode(ctx: ExtensionContext): void {
 		if (state.enabled) {
-			ctx.ui.notify("Already in discussion mode.", "info");
+			ctx.ui.notify("Already in architecture mode.", "info");
 			return;
 		}
 
@@ -108,19 +108,19 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		previousTools = pi.getActiveTools();
 		state.enabled = true;
 
-		// Activate discussion tools (includes ask_user_question)
-		pi.setActiveTools(DISCUSSION_TOOLS);
+		// Activate architecture tools (includes ask_user_question)
+		pi.setActiveTools(ARCH_TOOLS);
 
 		persistState();
 		updateStatus(ctx);
 		broadcastState();
 
-		ctx.ui.notify(`Discussion mode enabled. Tools: ${DISCUSSION_TOOLS.join(", ")}`, "info");
+		ctx.ui.notify(`Architecture mode enabled. Tools: ${ARCH_TOOLS.join(", ")}`, "info");
 	}
 
 	function exitMode(ctx: ExtensionContext): void {
 		if (!state.enabled) {
-			ctx.ui.notify("Not in discussion mode.", "info");
+			ctx.ui.notify("Not in architecture mode.", "info");
 			return;
 		}
 
@@ -138,7 +138,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		updateStatus(ctx);
 		broadcastState();
 
-		ctx.ui.notify("Discussion mode disabled. Full tool access restored.", "info");
+		ctx.ui.notify("Architecture mode disabled. Full tool access restored.", "info");
 	}
 
 	// ── Tool Registration ──
@@ -147,7 +147,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		name: ASK_TOOL_NAME,
 		label: "Ask User Question",
 		description:
-			"Ask the user 1-3 structured clarifying questions with 2-4 options each. Use this when you encounter ambiguity or need to understand user preferences during discussion mode.",
+			"Ask the user 1-3 structured clarifying questions with 2-4 options each. Use this when you encounter ambiguity or need to understand user preferences during architecture mode.",
 		parameters: Type.Object({
 			questions: Type.Array(
 				Type.Object({
@@ -204,8 +204,8 @@ export default function discussionMode(pi: ExtensionAPI): void {
 
 	// ── Command Registration ──
 
-	pi.registerCommand("discuss", {
-		description: "Enter discussion mode for read-only research. Optionally provide a topic.",
+	pi.registerCommand("arch", {
+		description: "Enter architecture mode for deep exploration and decision-making. Optionally provide a topic.",
 		handler: async (args, ctx) => {
 			const topic = args.trim();
 
@@ -214,7 +214,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 				if (topic) {
 					pi.sendUserMessage(topic);
 				} else {
-					ctx.ui.notify("Already in discussion mode. Use /discuss-off to exit.", "info");
+					ctx.ui.notify("Already in architecture mode. Use /arch-off to exit.", "info");
 				}
 				return;
 			}
@@ -228,8 +228,8 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.registerCommand("discuss-off", {
-		description: "Exit discussion mode and restore full tool access.",
+	pi.registerCommand("arch-off", {
+		description: "Exit architecture mode and restore full tool access.",
 		handler: async (_args, ctx) => {
 			exitMode(ctx);
 		},
@@ -237,12 +237,12 @@ export default function discussionMode(pi: ExtensionAPI): void {
 
 	// ── Event-based RPC (extension-to-extension) ──
 
-	pi.events.on("cmd:discuss:enter", () => {
+	pi.events.on("cmd:arch:enter", () => {
 		if (!savedCtx) return;
 		enterMode(savedCtx);
 	});
 
-	pi.events.on("cmd:discuss:exit", () => {
+	pi.events.on("cmd:arch:exit", () => {
 		if (!savedCtx || !state.enabled) return;
 		exitMode(savedCtx);
 	});
@@ -255,15 +255,15 @@ export default function discussionMode(pi: ExtensionAPI): void {
 
 		// Restore persisted state
 		const entries = ctx.sessionManager.getEntries();
-		const discussEntry = entries
+		const archEntry = entries
 			.filter((e: { type: string; customType?: string }) => e.type === "custom" && e.customType === STATE_ENTRY_TYPE)
-			.pop() as { data?: DiscussionState } | undefined;
+			.pop() as { data?: ArchState } | undefined;
 
-		if (discussEntry?.data?.enabled) {
+		if (archEntry?.data?.enabled) {
 			state.enabled = true;
 			previousTools = pi.getActiveTools();
-			pi.setActiveTools(DISCUSSION_TOOLS);
-			ctx.ui.notify("Discussion mode restored from previous session.", "info");
+			pi.setActiveTools(ARCH_TOOLS);
+			ctx.ui.notify("Architecture mode restored from previous session.", "info");
 		}
 
 		updateStatus(ctx);
@@ -283,7 +283,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		if (!state.enabled) return;
 
 		return {
-			systemPrompt: DISCUSSION_SYSTEM_PROMPT,
+			systemPrompt: ARCH_SYSTEM_PROMPT,
 		};
 	});
 
@@ -296,7 +296,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 			if (path && !isWriteablePath(path)) {
 				return {
 					block: true,
-					reason: `Discussion mode: you can only edit documentation files (${WRITEABLE_EXTENSIONS.join(", ")}). "${path}" looks like implementation code. Write your analysis as a Markdown document instead, or ask the user if they want to exit discussion mode.`,
+					reason: `Architecture mode: you can only edit documentation files (${WRITEABLE_EXTENSIONS.join(", ")}). "${path}" looks like implementation code. Write your analysis as a Markdown document instead, or ask the user if they want to exit architecture mode.`,
 				};
 			}
 		}
@@ -307,7 +307,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 			if (!isSafeCommand(command)) {
 				return {
 					block: true,
-					reason: `Discussion mode: this command is blocked because it may modify files or system state. The user wants to discuss, not run destructive commands.\nExplain what you were trying to do and ask how to proceed.\n\nCommand: ${command}`,
+					reason: `Architecture mode: this command is blocked because it may modify files or system state. The user wants to explore and align, not run destructive commands.\nExplain what you were trying to do and ask how to proceed.\n\nCommand: ${command}`,
 				};
 			}
 		}
@@ -318,14 +318,14 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		if (!state.enabled) return;
 		if (!event.isError) return;
 
-		// Tools that existed before discussion mode but are now disabled
-		const disabledTools = (previousTools ?? []).filter((t) => !DISCUSSION_TOOLS.includes(t));
+		// Tools that existed before architecture mode but are now disabled
+		const disabledTools = (previousTools ?? []).filter((t) => !ARCH_TOOLS.includes(t));
 		if (disabledTools.includes(event.toolName)) {
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Discussion mode: the "${event.toolName}" tool is not available. You are in discussion mode — focus on research and alignment with the user. Write your analysis as a Markdown document, or ask the user for direction.`,
+						text: `Architecture mode: the "${event.toolName}" tool is not available. You are in architecture mode — focus on exploration and alignment with the user. Write your analysis as a Markdown document, or ask the user for direction.`,
 					},
 				],
 				isError: true,
