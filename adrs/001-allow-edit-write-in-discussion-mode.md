@@ -37,17 +37,24 @@ Blocking `edit`/`write` treats all file modifications as identical, but they are
 
 **Cons**: File extension is a poor signal. `.ts` files can be pure type declarations, `.json` can be configuration documentation, `.rs` files can be plan drafts. Conversely, `.md` files can contain harmful instructions. Maintaining an accurate extension blocklist/allowlist is high maintenance and fragile.
 
-### Option C: Allow edit/write, guide via system prompt (chosen)
+### Option C: Allow edit/write on document files only (chosen)
 
-**Pros**: Gives the agent full expressive power. Behavior is constrained by the discussion system prompt, which explicitly instructs the agent to write documentation and plans but not implementation code. Modern LLMs are capable of understanding and following this distinction.
+**Pros**: Allows the agent to produce written artifacts (ADRs, plans, notes) while blocking modifications to implementation code.
 
-**Cons**: Relies on LLM judgment rather than a hard rule. An LLM in a confused state could potentially modify source code.
+**Cons**: File extension is an imperfect signal. `.ts` files can be type declarations, `.md` files can contain instructions that cause harm if run. However, a small allowlist of document extensions strikes a pragmatic balance.
 
 ## Decision
 
-**Allow `edit` and `write` in discussion mode, constrained by the system prompt.**
+**Allow `edit` and `write` in discussion mode, constrained by file extension filtering and system prompt guidance.**
 
-The system prompt explicitly states:
+Two layers of enforcement:
+
+| Layer | Mechanism | What it blocks |
+|---|---|---|
+| Hard block | File extension allowlist | `tool_call` hook rejects `edit`/`write` on paths not ending in `.md`, `.mdx`, `.txt`, `.html` |
+| Soft guidance | System prompt | Instructs the agent to write documentation and plans, not implementation code |
+
+The system prompt states:
 
 > You may write documentation, design documents, and plans. Do NOT write or modify implementation code. If unsure whether a change counts as implementation, ask the user.
 
@@ -58,23 +65,18 @@ Bash remains restricted to safe read-only commands, as bash commands are unbound
 ### Positive
 
 - Agent can produce ADRs, PRDs, implementation plans, and research summaries during discussion without mode switching.
+- File extension filtering prevents accidental source code modifications even if the LLM ignores the system prompt.
 - Discussion mode becomes a self-contained research + documentation workflow.
-- No fragile file extension filtering to maintain.
-
-### Amendment (2026-05-30)
-
-After testing, we found that system prompt alone was insufficient — the agent frequently ignored the "do not modify implementation code" instruction and started editing source files. We added **file extension filtering** as a hard block: `edit`/`write` is only allowed on `.md`, `.mdx`, `.txt`, `.html` files. Other extensions get an immediate block with guidance to write Markdown instead.
-
-This does not change the core decision (edit/write are allowed), but adds a lightweight enforcement layer. The "no fragile filtering" claim was wrong — a small allowlist of document extensions is simpler and more effective than relying entirely on LLM instruction-following.
 
 ### Negative
 
-- An LLM that ignores the system prompt could modify source code. Mitigated by: the discussion system prompt is injected every turn; file extension filtering blocks writes to implementation files; bash safety filtering prevents destructive shell-based changes.
-- Users who want a guaranteed no-modification mode will need a separate "strict discussion" variant (out of scope for now).
+- File extension filtering can produce false negatives (a `.ts` file containing only type declarations is blocked). Mitigation: the block message guides the agent to write Markdown instead and ask the user if they want to proceed.
+- An LLM that both ignores the system prompt AND targets a document file extension could produce harmful output. Mitigation: bash safety filtering prevents destructive shell execution; the user reviews written files.
+- Users who want a guaranteed no-modification mode need a separate "strict discussion" variant (out of scope).
 
-## Bash safety filtering retained
+## What is NOT changed
 
-This decision only affects `edit` and `write`. The safe-command filtering on `bash` is retained because:
+Bash safety filtering ([ADR-002](./002-safe-bash-filtering.md)) is retained unchanged. This decision only affects `edit` and `write`. Bash remains restricted because:
 
 1. Bash commands are unbounded — one `git reset --hard` can discard uncommitted work.
 2. When an LLM hits a tool block, it tends to try alternative approaches aggressively. If bash were unrestricted, a confused LLM could cycle through destructive commands seeking a workaround.

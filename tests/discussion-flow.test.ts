@@ -195,25 +195,12 @@ describe("commands", () => {
 		}
 	});
 
-	it("exits via /discuss off", async () => {
+	it("exits via /discuss-off", async () => {
 		const c = spawnPi(cwd, extPath);
 		try {
 			await prompt(c, "/discuss");
 			await notifyMatch(c, (s) => s.includes("enabled"));
-			await prompt(c, "/discuss off");
-			const m = await notifyMatch(c, (s) => s.includes("disabled"));
-			assert.ok(m);
-		} finally {
-			await kill(c);
-		}
-	});
-
-	it("/discuss exit is alias for off", async () => {
-		const c = spawnPi(cwd, extPath);
-		try {
-			await prompt(c, "/discuss");
-			await notifyMatch(c, (s) => s.includes("enabled"));
-			await prompt(c, "/discuss exit");
+			await prompt(c, "/discuss-off");
 			const m = await notifyMatch(c, (s) => s.includes("disabled"));
 			assert.ok(m);
 		} finally {
@@ -264,7 +251,7 @@ describe("conversation", { skip: !hasApiKey ? "No API key set" : false }, () => 
 			);
 
 			// 3. Exit
-			await prompt(c, "/discuss off");
+			await prompt(c, "/discuss-off");
 			const exitNotify = await notifyMatch(c, (s) => s.includes("disabled"));
 			assert.ok(exitNotify, "should notify mode disabled");
 		} finally {

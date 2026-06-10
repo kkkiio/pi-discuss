@@ -6,16 +6,18 @@
  *
  * Features:
  * - /discuss [topic] command to enter discussion mode
- * - /discuss off | exit to leave discussion mode
+ * - /discuss-off command to leave discussion mode
  * - Tools restricted to read-only + ask_user_question
  * - Bash restricted to safe read-only commands
  * - Custom ask_user_question tool for structured Q&A
  * - System prompt injected per-turn to bias toward exploration
  * - State persists across sessions and forks
+ * - pi.events for extension-to-extension RPC
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { WRITEABLE_EXTENSIONS, isSafeCommand, isWriteablePath } from "./guardrail";
 
 // ── Constants ──
 
@@ -25,108 +27,6 @@ const ASK_TOOL_NAME = "ask_user_question";
 
 const DISCUSSION_TOOLS = ["read", "bash", "grep", "find", "ls", "edit", "write", ASK_TOOL_NAME];
 const NORMAL_TOOLS = ["read", "bash", "edit", "write"];
-
-// File extensions that can be edited/written in discussion mode
-const WRITEABLE_EXTENSIONS = [".md", ".mdx", ".txt", ".html"];
-
-// ── Safe Bash Filtering ──
-
-const DESTRUCTIVE_PATTERNS = [
-	/\brm\b/i,
-	/\brmdir\b/i,
-	/\bmv\b/i,
-	/\bcp\b/i,
-	/\bmkdir\b/i,
-	/\btouch\b/i,
-	/\bchmod\b/i,
-	/\bchown\b/i,
-	/\bchgrp\b/i,
-	/\bln\b/i,
-	/\btee\b/i,
-	/\btruncate\b/i,
-	/\bdd\b/i,
-	/\bshred\b/i,
-	/\bnpm\s+(install|uninstall|update|ci|link|publish)/i,
-	/\byarn\s+(add|remove|install|publish)/i,
-	/\bpnpm\s+(add|remove|install|publish)/i,
-	/\bpip\s+(install|uninstall)/i,
-	/\bapt(-get)?\s+(install|remove|purge|update|upgrade)/i,
-	/\bbrew\s+(install|uninstall|upgrade)/i,
-	/\bgit\s+(add|commit|push|pull|merge|rebase|reset|checkout|branch\s+-[dD]|stash|cherry-pick|revert|tag|init|clone)/i,
-	/\bsudo\b/i,
-	/\bsu\b/i,
-	/\bkill\b/i,
-	/\bpkill\b/i,
-	/\bkillall\b/i,
-	/\breboot\b/i,
-	/\bshutdown\b/i,
-	/\bsystemctl\s+(start|stop|restart|enable|disable)/i,
-	/\bservice\s+\S+\s+(start|stop|restart)/i,
-	/\b(vim?|nano|emacs|code|subl)\b/i,
-];
-
-const SAFE_PATTERNS = [
-	/^\s*cat\b/,
-	/^\s*head\b/,
-	/^\s*tail\b/,
-	/^\s*less\b/,
-	/^\s*more\b/,
-	/^\s*grep\b/,
-	/^\s*find\b/,
-	/^\s*ls\b/,
-	/^\s*cd\b/,
-	/^\s*pwd\b/,
-	/^\s*echo\b/,
-	/^\s*printf\b/,
-	/^\s*wc\b/,
-	/^\s*sort\b/,
-	/^\s*uniq\b/,
-	/^\s*diff\b/,
-	/^\s*file\b/,
-	/^\s*stat\b/,
-	/^\s*du\b/,
-	/^\s*df\b/,
-	/^\s*tree\b/,
-	/^\s*which\b/,
-	/^\s*whereis\b/,
-	/^\s*type\b/,
-	/^\s*env\b/,
-	/^\s*printenv\b/,
-	/^\s*uname\b/,
-	/^\s*whoami\b/,
-	/^\s*id\b/,
-	/^\s*date\b/,
-	/^\s*cal\b/,
-	/^\s*uptime\b/,
-	/^\s*ps\b/,
-	/^\s*top\b/,
-	/^\s*htop\b/,
-	/^\s*free\b/,
-	/^\s*git\s+(status|log|diff|show|branch|remote|config\s+--get)/i,
-	/^\s*git\s+ls-/i,
-	/^\s*npm\s+(list|ls|view|info|search|outdated|audit)/i,
-	/^\s*yarn\s+(list|info|why|audit)/i,
-	/^\s*node\s+--version/i,
-	/^\s*python\s+--version/i,
-	/^\s*curl\s/i,
-	/^\s*wget\s+-O\s*-/i,
-	/^\s*just\b/,
-	/^\s*make\b/,
-	/^\s*node\b/,
-	/^\s*jq\b/,
-	/^\s*sed\s+-n/i,
-	/^\s*awk\b/,
-	/^\s*rg\b/,
-	/^\s*fd\b/,
-	/^\s*bat\b/,
-	/^\s*eza\b/,
-];
-
-function isSafeCommand(command: string): boolean {
-	const isDestructive = DESTRUCTIVE_PATTERNS.some((p) => p.test(command));
-	const isSafe = SAFE_PATTERNS.some((p) => p.test(command));
-	return !isDestructive && isSafe;
-}
 
 // ── Types ──
 
@@ -168,7 +68,7 @@ When blocked:
 
 Available tools: read, bash (safe commands only), grep, find, ls, edit, write, ask_user_question
 
-To exit discussion mode, tell the user to run /discuss off.`;
+To exit discussion mode, tell the user to run /discuss-off.`;
 
 // ── Extension ──
 
@@ -176,6 +76,9 @@ export default function discussionMode(pi: ExtensionAPI): void {
 	// ── Module-level state ──
 	const state: DiscussionState = { enabled: false };
 	let previousTools: string[] | undefined;
+
+	// Context bridged from session_start for use in pi.events callbacks
+	let savedCtx: ExtensionContext | undefined;
 
 	// ── Helpers ──
 
@@ -191,7 +94,11 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		pi.appendEntry(STATE_ENTRY_TYPE, { enabled: state.enabled });
 	}
 
-	function enterMode(ctx: ExtensionContext, topic?: string): void {
+	function broadcastState(): void {
+		pi.events.emit("discuss:state-changed", { enabled: state.enabled });
+	}
+
+	function enterMode(ctx: ExtensionContext): void {
 		if (state.enabled) {
 			ctx.ui.notify("Already in discussion mode.", "info");
 			return;
@@ -206,13 +113,9 @@ export default function discussionMode(pi: ExtensionAPI): void {
 
 		persistState();
 		updateStatus(ctx);
+		broadcastState();
 
 		ctx.ui.notify(`Discussion mode enabled. Tools: ${DISCUSSION_TOOLS.join(", ")}`, "info");
-
-		// If a topic was provided, send it as a user message
-		if (topic?.trim()) {
-			pi.sendUserMessage(topic.trim());
-		}
 	}
 
 	function exitMode(ctx: ExtensionContext): void {
@@ -233,35 +136,9 @@ export default function discussionMode(pi: ExtensionAPI): void {
 
 		persistState();
 		updateStatus(ctx);
+		broadcastState();
 
 		ctx.ui.notify("Discussion mode disabled. Full tool access restored.", "info");
-	}
-
-	function handleDiscussCommand(args: string, ctx: ExtensionContext): void {
-		const trimmed = args.trim();
-
-		// Explicit exit
-		if (trimmed === "off" || trimmed === "exit") {
-			exitMode(ctx);
-			return;
-		}
-
-		// No args → enter discussion mode
-		if (!trimmed) {
-			if (state.enabled) {
-				ctx.ui.notify("Already in discussion mode. Provide a topic or /discuss off to exit.", "info");
-				return;
-			}
-			enterMode(ctx);
-			return;
-		}
-
-		// Has topic → enter mode (or send topic if already in mode)
-		if (state.enabled) {
-			pi.sendUserMessage(trimmed);
-		} else {
-			enterMode(ctx, trimmed);
-		}
 	}
 
 	// ── Tool Registration ──
@@ -328,27 +205,54 @@ export default function discussionMode(pi: ExtensionAPI): void {
 	// ── Command Registration ──
 
 	pi.registerCommand("discuss", {
-		description: "Enter discussion mode for read-only research. Use /discuss off to exit.",
-		handler: async (args, ctx) => handleDiscussCommand(args, ctx),
+		description: "Enter discussion mode for read-only research. Optionally provide a topic.",
+		handler: async (args, ctx) => {
+			const topic = args.trim();
+
+			// Already in mode: just forward topic text
+			if (state.enabled) {
+				if (topic) {
+					pi.sendUserMessage(topic);
+				} else {
+					ctx.ui.notify("Already in discussion mode. Use /discuss-off to exit.", "info");
+				}
+				return;
+			}
+
+			enterMode(ctx);
+
+			// If a topic was provided, send it as a user message
+			if (topic) {
+				pi.sendUserMessage(topic);
+			}
+		},
 	});
 
-	// ── Input Event (extension-source fallback) ──
-	// When sendUserMessage is used (source="extension"), commands are skipped.
-	// This input handler acts as the fallback entry point.
-	// For TUI interactive mode, the registered command handler fires instead.
+	pi.registerCommand("discuss-off", {
+		description: "Exit discussion mode and restore full tool access.",
+		handler: async (_args, ctx) => {
+			exitMode(ctx);
+		},
+	});
 
-	pi.on("input", async (event, ctx) => {
-		if (!event.text.startsWith("/discuss")) return;
-		if (event.source !== "extension") return;
+	// ── Event-based RPC (extension-to-extension) ──
 
-		const trimmed = event.text.slice("/discuss".length).trim();
-		handleDiscussCommand(trimmed, ctx);
-		return { action: "handled" };
+	pi.events.on("cmd:discuss:enter", () => {
+		if (!savedCtx) return;
+		enterMode(savedCtx);
+	});
+
+	pi.events.on("cmd:discuss:exit", () => {
+		if (!savedCtx || !state.enabled) return;
+		exitMode(savedCtx);
 	});
 
 	// ── Lifecycle Events ──
 
 	pi.on("session_start", async (_event, ctx) => {
+		// Bridge context for use in pi.events callbacks
+		savedCtx = ctx;
+
 		// Restore persisted state
 		const entries = ctx.sessionManager.getEntries();
 		const discussEntry = entries
@@ -363,6 +267,11 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		}
 
 		updateStatus(ctx);
+
+		// Broadcast initial state so other extensions (e.g. Web UI) can sync
+		if (state.enabled) {
+			broadcastState();
+		}
 	});
 
 	pi.on("session_shutdown", async (_event, ctx) => {
@@ -384,7 +293,7 @@ export default function discussionMode(pi: ExtensionAPI): void {
 		// Block edits to non-documentation files
 		if (event.toolName === "edit" || event.toolName === "write") {
 			const path = event.input?.path as string | undefined;
-			if (path && !WRITEABLE_EXTENSIONS.some((ext) => path.endsWith(ext))) {
+			if (path && !isWriteablePath(path)) {
 				return {
 					block: true,
 					reason: `Discussion mode: you can only edit documentation files (${WRITEABLE_EXTENSIONS.join(", ")}). "${path}" looks like implementation code. Write your analysis as a Markdown document instead, or ask the user if they want to exit discussion mode.`,

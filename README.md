@@ -38,8 +38,7 @@ Or enter with a topic:
 Exit discussion mode:
 
 ```
-/discuss off
-/discuss exit
+/discuss-off
 ```
 
 The agent enters discussion mode:
@@ -62,9 +61,9 @@ Agent: Based on your answers (Redis, per-IP, 100 req/min), here's my recommendat
        1. Create middleware/rate-limit.ts using express-rate-limit
        2. Configure limits in config/rate-limit.ts
        3. Apply globally in server.ts
-       Run /discuss off to start implementing.
+       Run /discuss-off to start implementing.
 
-You: /discuss off
+You: /discuss-off
 
 Agent: [now has full tool access, starts implementing]
 ```

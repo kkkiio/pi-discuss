@@ -52,15 +52,20 @@ A single-file Pi extension that registers a command, a custom tool, and lifecycl
 
 The extension follows the plan-mode pattern from Pi's examples:
 
-1. **Command handler** (`/discuss`): TUI entry point, enters mode, accepts optional topic
-2. **Status command** (`/discuss-status`): Reports current mode state (used by tests)
-3. **Input event handler**: Extension-source fallback for when commands are skipped (`sendUserMessage`)
-4. **Tool registration** (`ask_user_question`): Structured Q&A tool, only active in discussion mode
-5. **Lifecycle events**:
-   - `session_start`: Restore persisted state, reapply tool restrictions
+1. **Command handlers**:
+   - `/discuss [topic]`: TUI entry point, enters mode, accepts optional topic
+   - `/discuss-off`: Exits discussion mode
+2. **Event listeners** (`pi.events`): Handle extension-to-extension RPC
+   - `cmd:discuss:enter` — enter discussion mode (no payload)
+   - `cmd:discuss:exit` — exit discussion mode (no payload)
+   - `discuss:state-changed` — broadcast on state change
+3. **Tool registration** (`ask_user_question`): Structured Q&A tool, only active in discussion mode
+4. **Lifecycle events**:
+   - `session_start`: Restore persisted state, bridge `ExtensionContext`, broadcast initial state
    - `session_shutdown`: Clear status UI
    - `before_agent_start`: Inject discussion system prompt
    - `tool_call`: Block `edit`/`write`, restrict bash to safe commands
+   - `tool_result`: Improve error messages for disabled tools
 
 ### Key Design Decisions
 
@@ -68,7 +73,7 @@ The extension follows the plan-mode pattern from Pi's examples:
 - **Tool restriction uses `pi.setActiveTools`/`pi.getActiveTools`**: Same approach as pi-plan-mode. Save current tools on enter, restore on exit.
 - **State persisted via `pi.appendEntry`**: Survives `/fork` (entries are copied to the new session).
 - **Bash filtering uses allowlist + blocklist**: Commands must NOT match destructive patterns AND must match a safe pattern.
-- **`/discuss` enters, does NOT toggle**: Toggle is anti-pattern for slash commands. Use `/discuss` to enter, `/discuss off` to exit.
+- **`/discuss` enters, does NOT toggle**: Toggle is anti-pattern for slash commands. Use `/discuss` to enter, `/discuss-off` to exit.
 
 ## Operation Guide
 
@@ -110,7 +115,7 @@ The extension follows the plan-mode pattern from Pi's examples:
    ```
    /discuss
    # Status shows "💬 discussing"
-   /discuss off
+   /discuss-off
    # Mode turned off
    ```
 
@@ -127,8 +132,7 @@ Tests use pi's `--mode rpc` to spawn a headless pi instance with the extension l
 **Test coverage**:
 - Extension starts with discussion mode OFF
 - `/discuss` enters discussion mode
-- `/discuss off` exits discussion mode
-- `/discuss exit` exits discussion mode (alias)
+- `/discuss-off` exits discussion mode
 - Re-entering mode shows "Already" notification
 
 **Test architecture**:

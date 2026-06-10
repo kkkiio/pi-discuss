@@ -75,5 +75,6 @@ All other patterns are retained unchanged.
 
 ## Related
 
-- `extensions/discussion-mode.ts` — `DESTRUCTIVE_PATTERNS`, `SAFE_PATTERNS`, `isSafeCommand()`
+- `extensions/guardrail.ts` — `DESTRUCTIVE_PATTERNS`, `SAFE_PATTERNS`, `isSafeCommand()`
+- `extensions/discussion-mode.ts` — imports `isSafeCommand` from guardrail
 - [ADR-001: Allow edit/write in discussion mode](./001-allow-edit-write-in-discussion-mode.md)
