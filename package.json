@@ -1,9 +1,11 @@
 {
   "name": "@kkkiio/pi-arch-mode",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Architecture mode extension for Pi — collaborative exploration, alignment, and decision-making",
   "type": "module",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "author": "kkkiio",
   "license": "MIT",
   "repository": {
@@ -11,7 +13,9 @@
     "url": "https://github.com/kkkiio/pi-arch-mode.git"
   },
   "pi": {
-    "extensions": ["./extensions/arch-mode.ts"]
+    "extensions": [
+      "./extensions/arch-mode.ts"
+    ]
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
