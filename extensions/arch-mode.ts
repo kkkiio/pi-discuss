@@ -76,6 +76,7 @@ export default function archMode(pi: ExtensionAPI): void {
 	// ── Module-level state ──
 	const state: ArchState = { enabled: false };
 	let previousTools: string[] | undefined;
+	let standDownThisTurn = false;
 
 	// Context bridged from session_start for use in pi.events callbacks
 	let savedCtx: ExtensionContext | undefined;
@@ -96,6 +97,15 @@ export default function archMode(pi: ExtensionAPI): void {
 
 	function broadcastState(): void {
 		pi.events.emit("arch:state-changed", { enabled: state.enabled });
+	}
+
+	function appendStandDown(original: unknown, message: string): unknown {
+		if (Array.isArray(original)) {
+			return [{ type: "text", text: message }, ...original];
+		}
+		const firstBlock =
+			typeof original === "string" ? { type: "text", text: original } : { type: "text", text: String(original) };
+		return [{ type: "text", text: message }, firstBlock];
 	}
 
 	function enterMode(ctx: ExtensionContext): void {
@@ -253,6 +263,9 @@ export default function archMode(pi: ExtensionAPI): void {
 		// Bridge context for use in pi.events callbacks
 		savedCtx = ctx;
 
+		// Announce presence to other extensions (e.g. mirror-server for Web UI)
+		pi.events.emit("arch:ready");
+
 		// Restore persisted state
 		const entries = ctx.sessionManager.getEntries();
 		const archEntry = entries
@@ -294,6 +307,7 @@ export default function archMode(pi: ExtensionAPI): void {
 		if (event.toolName === "edit" || event.toolName === "write") {
 			const path = event.input?.path as string | undefined;
 			if (path && !isWriteablePath(path)) {
+				standDownThisTurn = true;
 				return {
 					block: true,
 					reason: `Architecture mode: you can only edit documentation files (${WRITEABLE_EXTENSIONS.join(", ")}). "${path}" looks like implementation code. Write your analysis as a Markdown document instead, or ask the user if they want to exit architecture mode.`,
@@ -305,6 +319,7 @@ export default function archMode(pi: ExtensionAPI): void {
 		if (event.toolName === "bash") {
 			const command = event.input.command as string;
 			if (!isSafeCommand(command)) {
+				standDownThisTurn = true;
 				return {
 					block: true,
 					reason: `Architecture mode: this command is blocked because it may modify files or system state. The user wants to explore and align, not run destructive commands.\nExplain what you were trying to do and ask how to proceed.\n\nCommand: ${command}`,
@@ -316,20 +331,41 @@ export default function archMode(pi: ExtensionAPI): void {
 	// Improve error messages for disabled tools
 	pi.on("tool_result", async (event) => {
 		if (!state.enabled) return;
-		if (!event.isError) return;
 
-		// Tools that existed before architecture mode but are now disabled
-		const disabledTools = (previousTools ?? []).filter((t) => !ARCH_TOOLS.includes(t));
-		if (disabledTools.includes(event.toolName)) {
-			return {
-				content: [
-					{
-						type: "text",
-						text: `Architecture mode: the "${event.toolName}" tool is not available. You are in architecture mode — focus on exploration and alignment with the user. Write your analysis as a Markdown document, or ask the user for direction.`,
-					},
-				],
-				isError: true,
-			};
+		// Handle errors first.
+		// Blocked edit/write and blocked bash already have good rejection
+		// messages from tool_call — those pass through unchanged.
+		// But tools that were disabled by setActiveTools return a generic
+		// error from pi; we replace it with a friendlier message.
+		if (event.isError) {
+			const disabledTools = (previousTools ?? []).filter((t) => !ARCH_TOOLS.includes(t));
+			if (disabledTools.includes(event.toolName)) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Architecture mode: the "${event.toolName}" tool is not available. You are in architecture mode — focus on exploration and alignment with the user. Write your analysis as a Markdown document, or ask the user for direction.`,
+						},
+					],
+					isError: true,
+				};
+			}
+			return;
 		}
+
+		// Successful tool calls: if the agent triggered a stand-down earlier
+		// this turn, prepend the stand-down message to every result.
+		if (standDownThisTurn) {
+			const message =
+				"🛑 Architecture mode: you were blocked from editing implementation files " +
+				"earlier this turn. Stand down — stop and align with the user. Do NOT try " +
+				"workarounds with python, sed, bash, or any other tool. Ask the user how " +
+				"they want to proceed, or suggest exiting architecture mode with /arch-off.";
+			return { content: appendStandDown(event.content, message) };
+		}
+	});
+
+	pi.on("turn_start", () => {
+		standDownThisTurn = false;
 	});
 }

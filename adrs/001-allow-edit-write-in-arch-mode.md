@@ -74,6 +74,24 @@ Bash remains restricted to safe read-only commands, as bash commands are unbound
 - An LLM that both ignores the system prompt AND targets a document file extension could produce harmful output. Mitigation: bash safety filtering prevents destructive shell execution; the user reviews written files.
 - Users who want a guaranteed no-modification mode need a separate "strict architecture" variant (out of scope).
 
+### Disabled-tool error rewriting
+
+When architecture mode activates, `pi.setActiveTools(ARCH_TOOLS)` narrows the
+available tool set. Tools that were available before entering the mode (saved in
+`previousTools`) but are not in `ARCH_TOOLS` are silently removed from the
+agent's tool list.
+
+If the agent still attempts to call one of these tools, pi returns a generic
+error. The `tool_result` handler intercepts this error and replaces it with a
+friendlier, action-guiding message:
+
+> Architecture mode: the "{toolName}" tool is not available. You are in
+> architecture mode — focus on exploration and alignment with the user.
+> Write your analysis as a Markdown document, or ask the user for direction.
+
+This prevents the agent from seeing a confusing low-level error and instead
+redirects it to compliant behavior.
+
 ## What is NOT changed
 
 Bash safety filtering ([ADR-002](./002-safe-bash-filtering.md)) is retained unchanged. This decision only affects `edit` and `write`. Bash remains restricted because:
